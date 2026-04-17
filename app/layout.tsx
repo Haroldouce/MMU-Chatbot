@@ -10,7 +10,7 @@ const _geistMono = Geist_Mono({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "EBchat - Multimedia University FAQ Chatbot",
   description:
-    "Get instant answers to your Multimedia University questions 24/7 with EBchat, your intelligent FAQ assistant.",
+    "Get instant answers to your Multimedia University questions with EBchat, your intelligent FAQ assistant.",
   icons: {
     icon: "data:image/x-icon;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
   },

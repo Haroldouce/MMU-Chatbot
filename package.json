@@ -6,7 +6,8 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "eslint .",
-    "start": "next start"
+    "start": "next start",
+    "backend": "uvicorn server.rag_api:app --reload --host 0.0.0.0 --port 8000"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

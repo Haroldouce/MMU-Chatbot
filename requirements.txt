@@ -1,0 +1,13 @@
+chromadb
+ollama
+fastapi
+pydantic
+pypdf
+sentence-transformers
+uvicorn
+docling
+pymupdf
+pymupdf4llm
+asyncpg
+sqlalchemy
+psycorg2

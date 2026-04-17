@@ -111,6 +111,8 @@ export default function ChatPage() {
     },
   ])
   const [input, setInput] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleSelectChat = (chatId: string) => {
     setSelectedChatId(chatId)
@@ -132,27 +134,55 @@ export default function ChatPage() {
     setInput("")
   }
 
-  const handleSendMessage = (content: string) => {
+  const handleSendMessage = async (content: string) => {
     if (!content.trim()) return
 
-    // Add user message
     const userMessage = {
       id: Date.now().toString(),
       role: "user" as const,
       content,
     }
+
     setMessages((prev) => [...prev, userMessage])
     setInput("")
+    setError(null)
+    setLoading(true)
 
-    // Simulate bot response
-    setTimeout(() => {
+    try {
+      const res = await fetch("/api/rag", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ question: content, n_results: 3 }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err?.error || "Unable to fetch answer")
+      }
+
+      const data = await res.json()
+      const answer = data?.answer ?? "I don't know."
+
       const botMessage = {
         id: (Date.now() + 1).toString(),
         role: "assistant" as const,
-        content: "I'm processing your question about Multimedia University. How else can I assist you?",
+        content: answer,
+      }
+
+      setMessages((prev) => [...prev, botMessage])
+    } catch (err: any) {
+      const botMessage = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant" as const,
+        content: "Sorry, I couldn't get an answer right now. Please try again later.",
       }
       setMessages((prev) => [...prev, botMessage])
-    }, 1000)
+      setError(err?.message ?? "Unknown error")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -195,6 +225,12 @@ export default function ChatPage() {
         </header>
 
         {/* Messages Area */}
+        {loading && (
+          <div className="px-4 py-2 text-xs text-muted-foreground text-center">Generating answer...</div>
+        )}
+        {error && (
+          <div className="px-4 py-2 text-xs text-destructive text-center">Error: {error}</div>
+        )}
         <ChatMessages messages={messages} />
 
         {/* Input Area */}

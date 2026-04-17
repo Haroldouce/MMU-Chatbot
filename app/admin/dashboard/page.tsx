@@ -188,6 +188,22 @@ export default function AdminDashboard() {
                                   path: json.path,
                                 }
                                 setDocuments((prev) => [newDoc, ...prev])
+
+                                // Call RAG ingest API (backend) with the uploaded file path
+                                try {
+                                  const ingestRes = await fetch('/api/rag', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ pdf_paths: [json.path] }),
+                                  })
+                                  const ingestJson = await ingestRes.json()
+                                  if (!ingestRes.ok) {
+                                    console.error('Ingest failed', ingestJson)
+                                  }
+                                } catch (ingestErr) {
+                                  console.error('Ingest error', ingestErr)
+                                }
+
                                 setSelectedFile(null)
                                 if (fileInputRef.current) fileInputRef.current.value = ''
                               } else {
