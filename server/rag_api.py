@@ -1,10 +1,14 @@
+#rag_api.py
 import os
 import time
 from typing import Any, Dict, List
 
 import chromadb
 import ollama
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi.middleware.cors import CORSMiddleware
+
+
 from pydantic import BaseModel
 from pypdf import PdfReader
 from chromadb.utils import embedding_functions
@@ -14,10 +18,15 @@ from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 
 from db import AsyncSession, get_db
-from models import User, Base
+from models import Profile, Base
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
+
+from supabase import create_client
+
+supabase = create_client(os.getenv("NEXT_PUBLIC_SUPABASE_URL"), os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY"))
+
 
 
 # ==========================================
@@ -38,6 +47,14 @@ collection = client.get_or_create_collection(
 
 app = FastAPI(title="MMU RAG API")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 class QueryPayload(BaseModel):
     question: str
     n_results: int = 3
@@ -54,6 +71,7 @@ class IngestPayload(BaseModel):
 class IngestResponse(BaseModel):
     ingested: List[str]
     skipped: List[str]
+
 
 def convert_pdf_to_markdown(pdf_path: str) -> str:
     """
@@ -264,6 +282,16 @@ def rag_query(question: str, n_results: int = 3) -> QueryResponse:
         }
     )
 
+async def get_current_user(authorization: str = Header(...)):
+    try:
+        token = authorization.replace("Bearer ", "")
+        user = supabase.auth.get_user(token)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return user.user
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
 
 @app.get("/health")
 async def health_check(db: AsyncSession = Depends(get_db)):
@@ -274,9 +302,9 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         return {"status": "unhealthy", "details": str(e)}
     
 @app.get("/user/{user_id}")
-async def get_user(user_id: int, db: AsyncSession = Depends(get_db)):
-    user = await db.get(User, user_id)
-    return user
+async def get_user(user_id: str, db: AsyncSession = Depends(get_db)):  # id is str (UUID)
+    profile = await db.get(Profile, user_id)
+    return profile
 
 @app.get("/chunks")
 def get_all_chunks():
@@ -297,7 +325,7 @@ def get_all_chunks():
     }
 
 @app.post("/ingest", response_model=IngestResponse)
-def api_ingest(payload: IngestPayload):
+def api_ingest(payload: IngestPayload, user = Depends(get_current_user)):
     print("entered")
     ingested = []
     skipped = []
