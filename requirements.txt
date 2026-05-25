@@ -11,3 +11,4 @@ pymupdf4llm
 asyncpg
 sqlalchemy
 psycorg2
+@supabase/supabase-js

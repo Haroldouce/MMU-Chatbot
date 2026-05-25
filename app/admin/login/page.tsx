@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { Suspense, useState, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,57 +9,84 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { MessageSquare, ArrowRight, AlertCircle, Lock } from "lucide-react"
+import supabase from "@/lib/supabase"
 
-export default function AdminLoginPage() {
+function AdminLoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  useEffect(() => {
+    if (searchParams.get("error") === "forbidden") {
+      setError("You do not have admin access. Contact an administrator.")
+    }
+  }, [searchParams])
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError("")
     setIsLoading(true)
 
-    // Simulate login process
-    setTimeout(() => {
-      // Validate admin credentials
-      if (email === "admin@ebchat.com" && password === "admin123") {
-        setIsLoading(false)
-        router.push("/admin/dashboard")
-      } else {
-        setIsLoading(false)
-        setError("Invalid email or password. Try admin@ebchat.com / admin123")
-      }
-    }, 1000)
+    const { data, error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (signInError) {
+      setError(signInError.message)
+      setIsLoading(false)
+      return
+    }
+
+    if (!data.user) {
+      setError("Sign in failed. Please try again.")
+      setIsLoading(false)
+      return
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", data.user.id)
+      .maybeSingle()
+
+    if (profileError || profile?.role !== "admin") {
+      await supabase.auth.signOut()
+      setError("This account is not an administrator.")
+      setIsLoading(false)
+      return
+    }
+
+    router.push("/admin/dashboard")
+    setIsLoading(false)
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20 flex items-center justify-center px-4">
       <div className="w-full max-w-md">
-        {/* Logo */}
         <div className="flex items-center justify-center gap-2 mb-8">
           <MessageSquare className="h-8 w-8 text-primary" />
           <span className="text-2xl font-bold">EBchat</span>
         </div>
 
-        {/* Admin Badge */}
         <div className="flex items-center justify-center gap-2 mb-6">
           <Lock className="h-4 w-4 text-destructive" />
           <span className="text-sm font-semibold text-destructive">Admin Portal</span>
         </div>
 
-        {/* Login Card */}
         <Card className="border border-border">
           <CardHeader className="space-y-2 text-center">
             <CardTitle className="text-2xl">Admin Login</CardTitle>
-            <CardDescription>Access the EBchat administration panel</CardDescription>
+            <CardDescription>
+              Sign in with your admin Supabase account
+            </CardDescription>
           </CardHeader>
 
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Error Alert */}
               {error && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
@@ -67,15 +94,12 @@ export default function AdminLoginPage() {
                 </Alert>
               )}
 
-              {/* Email Field */}
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium">
-                  Email Address
-                </Label>
+                <Label htmlFor="email">Email Address</Label>
                 <Input
                   id="email"
                   type="email"
-                  placeholder="admin@ebchat.com"
+                  placeholder="admin@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -84,11 +108,8 @@ export default function AdminLoginPage() {
                 />
               </div>
 
-              {/* Password Field */}
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-sm font-medium">
-                  Password
-                </Label>
+                <Label htmlFor="password">Password</Label>
                 <Input
                   id="password"
                   type="password"
@@ -101,7 +122,6 @@ export default function AdminLoginPage() {
                 />
               </div>
 
-              {/* Submit Button */}
               <Button
                 type="submit"
                 className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-10"
@@ -112,20 +132,32 @@ export default function AdminLoginPage() {
               </Button>
             </form>
 
-            {/* Back to Main Link */}
             <div className="mt-6 text-center text-sm text-muted-foreground">
-              <Link href="/login" className="text-primary font-semibold hover:underline transition-colors">
+              <Link href="/login" className="text-primary font-semibold hover:underline">
                 Back to user login
               </Link>
             </div>
           </CardContent>
         </Card>
 
-        {/* Footer Info */}
         <p className="mt-8 text-center text-xs text-muted-foreground">
-          Admin Portal for EBchat Management
+          Set <code className="text-xs">profiles.role = &apos;admin&apos;</code> in Supabase for your user.
         </p>
       </div>
     </div>
+  )
+}
+
+export default function AdminLoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <p className="text-muted-foreground">Loading…</p>
+        </div>
+      }
+    >
+      <AdminLoginForm />
+    </Suspense>
   )
 }

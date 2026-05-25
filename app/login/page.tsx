@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { MessageSquare, ArrowRight, AlertCircle } from "lucide-react"
+import supabase from "@/lib/supabase"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -17,22 +18,35 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError("")
     setIsLoading(true)
 
+    const {data, error} = await supabase.auth.signInWithPassword({
+      email, 
+      password
+    }) 
+
+    if(error) {
+      setError(error.message)
+      setIsLoading(false)
+      return
+    }
+
+    router.push("/chat")
+
     // Simulate login process
-    setTimeout(() => {
-      // Validate credentials
-      if (email === "test@gmail.com" && password === "test123") {
-        setIsLoading(false)
-        router.push("/chat")
-      } else {
-        setIsLoading(false)
-        setError("Invalid email or password. Try test@gmail.com / test123")
-      }
-    }, 1000)
+    // setTimeout(() => {
+    //   // Validate credentials
+    //   if (email === "test@gmail.com" && password === "test123") {
+    //     setIsLoading(false)
+    //     router.push("/chat")
+    //   } else {
+    //     setIsLoading(false)
+    //     setError("Invalid email or password. Try test@gmail.com / test123")
+    //   }
+    // }, 1000)
   }
 
   return (
@@ -126,17 +140,17 @@ export default function LoginPage() {
               </Button>
 
               {/* Divider */}
-              <div className="relative my-6">
+              {/* <div className="relative my-6">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-border"></div>
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
                   <span className="bg-card px-2 text-muted-foreground">Or continue with</span>
                 </div>
-              </div>
+              </div> */}
 
               {/* Social Login Buttons */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* <div className="grid grid-cols-2 gap-3">
                 <Button
                   type="button"
                   variant="outline"
@@ -153,12 +167,12 @@ export default function LoginPage() {
                 >
                   Microsoft
                 </Button>
-              </div>
+              </div> */}
             </form>
 
             {/* Guest Login */}
             <div className="mt-6 pt-4 border-t border-border">
-              <Link href="/chat">
+              <Link href="/chat-guest">
                 <Button
                   type="button"
                   variant="ghost"

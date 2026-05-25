@@ -1,66 +1,241 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { MessageSquare, LogOut, Upload, Trash2, FileText, Settings, Users, BarChart3, User } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  MessageSquare,
+  LogOut,
+  Upload,
+  Trash2,
+  FileText,
+  Users,
+  BarChart3,
+  User,
+  AlertCircle,
+  RefreshCw,
+} from "lucide-react"
+import supabase from "@/lib/supabase"
+
+interface AdminDocument {
+  id: string
+  name: string
+  fileName: string
+  date: string
+  size: string
+  path: string
+}
+
+interface AdminUser {
+  id: string
+  username: string | null
+  role: string | null
+}
+
+interface ActivityItem {
+  id: string
+  timestamp: string
+  event: string
+  details: string
+}
+
+interface AdminStats {
+  totalUsers: number
+  totalConversations: number
+  totalMessages: number
+  documentCount: number
+}
 
 export default function AdminDashboard() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState("documents")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleLogout = () => {
+  const [stats, setStats] = useState<AdminStats | null>(null)
+  const [documents, setDocuments] = useState<AdminDocument[]>([])
+  const [users, setUsers] = useState<AdminUser[]>([])
+  const [activity, setActivity] = useState<ActivityItem[]>([])
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [reindexing, setReindexing] = useState(false)
+  const [ingestMessage, setIngestMessage] = useState<string | null>(null)
+
+  const loadDashboard = useCallback(async () => {
+    setError(null)
+    setLoading(true)
+    try {
+      const [statsRes, docsRes, usersRes, activityRes] = await Promise.all([
+        fetch("/api/admin/stats"),
+        fetch("/api/admin/documents"),
+        fetch("/api/admin/users"),
+        fetch("/api/admin/activity"),
+      ])
+
+      if (!statsRes.ok) {
+        const body = await statsRes.json().catch(() => ({}))
+        throw new Error(body?.error ?? "Failed to load stats")
+      }
+
+      const statsData = await statsRes.json()
+      setStats(statsData)
+
+      if (docsRes.ok) {
+        const docsData = await docsRes.json()
+        setDocuments(docsData.documents ?? [])
+      }
+
+      if (usersRes.ok) {
+        const usersData = await usersRes.json()
+        setUsers(usersData.users ?? [])
+      }
+
+      if (activityRes.ok) {
+        const activityData = await activityRes.json()
+        setActivity(activityData.activity ?? [])
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load dashboard")
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadDashboard()
+  }, [loadDashboard])
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
     router.push("/admin/login")
   }
 
-  const [documents, setDocuments] = useState([
-    { id: 1, name: "CampusGuide.pdf", date: "2025-01-15", size: "2.4 MB", path: "/uploads/CampusGuide.pdf" },
-    { id: 2, name: "ExamRules.docx", date: "2025-01-18", size: "1.2 MB", path: "/uploads/ExamRules.docx" },
-    { id: 3, name: "StudentHandbook.pdf", date: "2025-01-10", size: "3.8 MB", path: "/uploads/StudentHandbook.pdf" },
-  ])
-
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [uploading, setUploading] = useState(false)
-  
-  const handleDelete = async (docId: number, docPath?: string) => {
-    if (!confirm('Delete this document?')) return
+  const handleDelete = async (doc: AdminDocument) => {
+    if (!confirm(`Delete "${doc.name}"?`)) return
     try {
-      const res = await fetch('/api/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: docPath, name: undefined }),
+      const res = await fetch("/api/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: doc.path, name: doc.fileName }),
       })
       const json = await res.json()
-      if (json.ok) {
-        setDocuments((prev) => prev.filter((d) => d.id !== docId))
-      } else {
-        console.error('Delete failed', json)
+      if (!res.ok) {
+        throw new Error(json?.error ?? "Delete failed")
       }
-    } catch (err) {
-      console.error(err)
+      setDocuments((prev) => prev.filter((d) => d.id !== doc.id))
+      setStats((prev) =>
+        prev ? { ...prev, documentCount: Math.max(0, prev.documentCount - 1) } : prev,
+      )
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Delete failed")
     }
   }
 
-  const systemLogs = [
-    { id: 1, timestamp: "2025-01-23 14:30:45", event: "User login", details: "test@gmail.com logged in" },
-    { id: 2, timestamp: "2025-01-23 14:15:30", event: "Chat created", details: "New conversation started" },
-    { id: 3, timestamp: "2025-01-23 13:45:12", event: "Document uploaded", details: "ExamRules.docx uploaded" },
-    { id: 4, timestamp: "2025-01-23 12:20:00", event: "Model switched", details: "User switched to Phi 3.8b" },
-  ]
+  const handleReindexAll = async () => {
+    if (!confirm("Ingest all PDFs in public/uploads into the knowledge base?")) return
+    setReindexing(true)
+    setIngestMessage(null)
+    setError(null)
+    try {
+      const res = await fetch("/api/admin/reindex", { method: "POST" })
+      const json = await res.json()
+      if (!res.ok) {
+        throw new Error(json?.error ?? json?.detail ?? "Reindex failed")
+      }
+      const ingested = json.ingested?.length ?? 0
+      const skipped = json.skipped?.length ?? 0
+      const total = json.collection_count
+      setIngestMessage(
+        `Reindex complete: ${ingested} ingested, ${skipped} skipped` +
+          (total != null ? ` (${total} chunks total).` : "."),
+      )
+      await loadDashboard()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Reindex failed")
+    } finally {
+      setReindexing(false)
+    }
+  }
 
-  const feedback = [
-    { id: 1, user: "test@gmail.com", rating: 5, message: "Great chatbot! Very helpful." },
-    { id: 2, user: "student@gmail.com", rating: 4, message: "Good responses, could be faster." },
-    { id: 3, user: "admin@test.com", rating: 5, message: "Excellent service for students." },
-  ]
+  const handleUpload = async (file: File) => {
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      setError("Only PDF files can be ingested into the knowledge base.")
+      return
+    }
+
+    setUploading(true)
+    setIngestMessage(null)
+    setError(null)
+
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+
+      const uploadRes = await fetch("/api/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, data: dataUrl }),
+      })
+      const uploadJson = await uploadRes.json()
+
+      if (!uploadRes.ok || !uploadJson.ok) {
+        throw new Error(uploadJson?.error ?? "Upload failed")
+      }
+
+      const ingestRes = await fetch("/api/rag", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pdf_paths: [uploadJson.path] }),
+      })
+      const ingestJson = await ingestRes.json()
+
+      if (!ingestRes.ok) {
+        throw new Error(ingestJson?.error ?? ingestJson?.detail ?? "Ingest failed")
+      }
+
+      const ingested = ingestJson.ingested?.length ?? 0
+      const skipped = ingestJson.skipped?.length ?? 0
+      const result = ingestJson.results?.[0]
+      const chunks = result?.chunks ?? 0
+      const collectionCount = ingestJson.collection_count
+
+      if (ingested > 0 && chunks > 0) {
+        setIngestMessage(
+          `Ingested ${chunks} chunks into the knowledge base` +
+            (collectionCount != null ? ` (${collectionCount} total in index).` : "."),
+        )
+      } else if (result?.status === "skipped" && chunks > 0) {
+        setIngestMessage(`Already indexed (${chunks} chunks). Re-upload with a new filename to re-ingest.`)
+      } else if (result?.status === "empty" || result?.status === "error") {
+        throw new Error(result?.message ?? "Ingest failed — no text extracted from PDF")
+      } else {
+        setIngestMessage(
+          skipped > 0
+            ? "File already in knowledge base (skipped)."
+            : "Upload complete.",
+        )
+      }
+
+      await loadDashboard()
+      if (fileInputRef.current) fileInputRef.current.value = ""
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Upload failed")
+    } finally {
+      setUploading(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-40">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-3">
@@ -71,8 +246,17 @@ export default function AdminDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={loadDashboard}
+              disabled={loading}
+              aria-label="Refresh"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            </Button>
             <Link href="/admin/profile">
-              <Button variant="outline" size="icon">
+              <Button variant="outline" size="icon" aria-label="Profile">
                 <User className="h-4 w-4" />
               </Button>
             </Link>
@@ -84,16 +268,28 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
-        {/* Stats Cards */}
+        {error && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        {ingestMessage && (
+          <Alert className="mb-6">
+            <AlertDescription>{ingestMessage}</AlertDescription>
+          </Alert>
+        )}
+
         <div className="grid gap-4 md:grid-cols-4 mb-8">
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Total Users</p>
-                  <p className="text-3xl font-bold mt-2">1,234</p>
+                  <p className="text-3xl font-bold mt-2">
+                    {loading ? "…" : (stats?.totalUsers ?? 0)}
+                  </p>
                 </div>
                 <Users className="h-8 w-8 text-primary/50" />
               </div>
@@ -104,8 +300,10 @@ export default function AdminDashboard() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Total Chats</p>
-                  <p className="text-3xl font-bold mt-2">5,678</p>
+                  <p className="text-sm text-muted-foreground">Conversations</p>
+                  <p className="text-3xl font-bold mt-2">
+                    {loading ? "…" : (stats?.totalConversations ?? 0)}
+                  </p>
                 </div>
                 <MessageSquare className="h-8 w-8 text-primary/50" />
               </div>
@@ -116,8 +314,10 @@ export default function AdminDashboard() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Avg Rating</p>
-                  <p className="text-3xl font-bold mt-2">4.8/5</p>
+                  <p className="text-sm text-muted-foreground">Messages</p>
+                  <p className="text-3xl font-bold mt-2">
+                    {loading ? "…" : (stats?.totalMessages ?? 0)}
+                  </p>
                 </div>
                 <BarChart3 className="h-8 w-8 text-primary/50" />
               </div>
@@ -128,8 +328,10 @@ export default function AdminDashboard() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">FAQ Docs</p>
-                  <p className="text-3xl font-bold mt-2">{documents.length}</p>
+                  <p className="text-sm text-muted-foreground">FAQ Documents</p>
+                  <p className="text-3xl font-bold mt-2">
+                    {loading ? "…" : (stats?.documentCount ?? documents.length)}
+                  </p>
                 </div>
                 <FileText className="h-8 w-8 text-primary/50" />
               </div>
@@ -137,97 +339,53 @@ export default function AdminDashboard() {
           </Card>
         </div>
 
-        {/* Tabs Section */}
         <Card>
           <CardHeader>
             <CardTitle>Management</CardTitle>
-            <CardDescription>Manage documents, logs, and user feedback</CardDescription>
+            <CardDescription>
+              Documents, users, and platform activity
+            </CardDescription>
           </CardHeader>
 
           <CardContent>
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="documents">FAQ Documents</TabsTrigger>
-                <TabsTrigger value="logs">System Logs</TabsTrigger>
-                <TabsTrigger value="feedback">User Feedback</TabsTrigger>
+                <TabsTrigger value="users">Users</TabsTrigger>
+                <TabsTrigger value="logs">Activity</TabsTrigger>
+                <TabsTrigger value="feedback">Feedback</TabsTrigger>
               </TabsList>
 
-              {/* FAQ Documents Tab */}
               <TabsContent value="documents" className="space-y-4">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="font-semibold">Uploaded Documents</h3>
+                <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
+                  <h3 className="font-semibold">Uploaded PDFs</h3>
                   <div className="flex items-center gap-2">
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept="*/*"
+                      accept=".pdf,application/pdf"
                       className="hidden"
-                      onChange={async (e) => {
-                        const f = e.target.files?.[0] ?? null
-                        setSelectedFile(f)
-                        if (f) {
-                          // auto-upload
-                          setUploading(true)
-                          try {
-                            const reader = new FileReader()
-                            reader.readAsDataURL(f)
-                            reader.onload = async () => {
-                              const dataUrl = reader.result as string
-                              const res = await fetch('/api/upload', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ name: f.name, data: dataUrl }),
-                              })
-                              const json = await res.json()
-                              if (json.ok) {
-                                const newDoc = {
-                                  id: Date.now(),
-                                  name: f.name,
-                                  date: new Date().toISOString().slice(0, 10),
-                                  size: `${(f.size / 1024 / 1024).toFixed(2)} MB`,
-                                  path: json.path,
-                                }
-                                setDocuments((prev) => [newDoc, ...prev])
-
-                                // Call RAG ingest API (backend) with the uploaded file path
-                                try {
-                                  const ingestRes = await fetch('/api/rag', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ pdf_paths: [json.path] }),
-                                  })
-                                  const ingestJson = await ingestRes.json()
-                                  if (!ingestRes.ok) {
-                                    console.error('Ingest failed', ingestJson)
-                                  }
-                                } catch (ingestErr) {
-                                  console.error('Ingest error', ingestErr)
-                                }
-
-                                setSelectedFile(null)
-                                if (fileInputRef.current) fileInputRef.current.value = ''
-                              } else {
-                                console.error('Upload failed', json)
-                              }
-                              setUploading(false)
-                            }
-                          } catch (err) {
-                            console.error(err)
-                            setUploading(false)
-                          }
-                        }
+                      onChange={(e) => {
+                        const f = e.target.files?.[0]
+                        if (f) handleUpload(f)
                       }}
                     />
-
+                    <Button
+                      variant="outline"
+                      className="gap-2"
+                      onClick={handleReindexAll}
+                      disabled={uploading || reindexing}
+                    >
+                      {reindexing ? "Reindexing…" : "Reindex all PDFs"}
+                    </Button>
                     <Button
                       className="gap-2"
                       onClick={() => fileInputRef.current?.click()}
-                      disabled={uploading}
+                      disabled={uploading || reindexing}
                     >
                       <Upload className="h-4 w-4" />
-                      {uploading ? 'Uploading...' : 'Upload Document'}
+                      {uploading ? "Uploading…" : "Upload PDF"}
                     </Button>
-                    {selectedFile ? <span className="text-sm text-muted-foreground">{selectedFile.name}</span> : null}
                   </div>
                 </div>
 
@@ -235,20 +393,40 @@ export default function AdminDashboard() {
                   <table className="w-full">
                     <thead className="bg-muted/50">
                       <tr>
-                        <th className="px-4 py-3 text-left text-sm font-semibold">Document Name</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold">Document</th>
                         <th className="px-4 py-3 text-left text-sm font-semibold">Date</th>
                         <th className="px-4 py-3 text-left text-sm font-semibold">Size</th>
                         <th className="px-4 py-3 text-right text-sm font-semibold">Action</th>
                       </tr>
                     </thead>
                     <tbody>
+                      {documents.length === 0 && (
+                        <tr>
+                          <td colSpan={4} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                            No documents uploaded yet.
+                          </td>
+                        </tr>
+                      )}
                       {documents.map((doc) => (
                         <tr key={doc.id} className="border-t border-border hover:bg-muted/50">
-                          <td className="px-4 py-3 text-sm">{doc.name}</td>
+                          <td className="px-4 py-3 text-sm">
+                            <a
+                              href={doc.path}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="hover:underline"
+                            >
+                              {doc.name}
+                            </a>
+                          </td>
                           <td className="px-4 py-3 text-sm text-muted-foreground">{doc.date}</td>
                           <td className="px-4 py-3 text-sm text-muted-foreground">{doc.size}</td>
                           <td className="px-4 py-3 text-right">
-                            <Button variant="ghost" size="sm" onClick={() => handleDelete(doc.id, doc.path)}>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDelete(doc)}
+                            >
                               <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
                           </td>
@@ -259,51 +437,82 @@ export default function AdminDashboard() {
                 </div>
               </TabsContent>
 
-              {/* System Logs Tab */}
-              <TabsContent value="logs" className="space-y-4">
-                <h3 className="font-semibold mb-4">Recent System Logs</h3>
+              <TabsContent value="users" className="space-y-4">
+                <h3 className="font-semibold mb-4">Registered users</h3>
+                <div className="border border-border rounded-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-semibold">Username</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold">Role</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold">User ID</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {users.length === 0 && (
+                        <tr>
+                          <td colSpan={3} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                            No users found.
+                          </td>
+                        </tr>
+                      )}
+                      {users.map((u) => (
+                        <tr key={u.id} className="border-t border-border hover:bg-muted/50">
+                          <td className="px-4 py-3 text-sm">{u.username ?? "—"}</td>
+                          <td className="px-4 py-3 text-sm">
+                            <span
+                              className={
+                                u.role === "admin"
+                                  ? "text-primary font-medium"
+                                  : "text-muted-foreground"
+                              }
+                            >
+                              {u.role ?? "user"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-muted-foreground font-mono">
+                            {u.id}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </TabsContent>
 
-                <div className="space-y-3">
-                  {systemLogs.map((log) => (
-                    <div key={log.id} className="border border-border rounded-lg p-4 hover:bg-muted/50">
-                      <div className="flex justify-between items-start mb-2">
+              <TabsContent value="logs" className="space-y-4">
+                <h3 className="font-semibold mb-4">Recent activity</h3>
+                <div className="space-y-3 max-h-[480px] overflow-y-auto">
+                  {activity.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-8">
+                      No activity yet.
+                    </p>
+                  )}
+                  {activity.map((log) => (
+                    <div
+                      key={log.id}
+                      className="border border-border rounded-lg p-4 hover:bg-muted/50"
+                    >
+                      <div className="flex justify-between items-start gap-4">
                         <div>
                           <p className="font-medium text-sm">{log.event}</p>
-                          <p className="text-xs text-muted-foreground">{log.details}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{log.details}</p>
                         </div>
-                        <span className="text-xs text-muted-foreground">{log.timestamp}</span>
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {new Date(log.timestamp).toLocaleString()}
+                        </span>
                       </div>
                     </div>
                   ))}
                 </div>
               </TabsContent>
 
-              {/* User Feedback Tab */}
               <TabsContent value="feedback" className="space-y-4">
-                <h3 className="font-semibold mb-4">User Feedback</h3>
-
-                <div className="space-y-3">
-                  {feedback.map((item) => (
-                    <div key={item.id} className="border border-border rounded-lg p-4 hover:bg-muted/50">
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <p className="font-medium text-sm">{item.user}</p>
-                          <div className="flex items-center gap-1 my-2">
-                            {[...Array(5)].map((_, i) => (
-                              <span
-                                key={i}
-                                className={`text-lg ${i < item.rating ? "text-yellow-400" : "text-muted-foreground"}`}
-                              >
-                                ★
-                              </span>
-                            ))}
-                          </div>
-                          <p className="text-sm text-muted-foreground">{item.message}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <h3 className="font-semibold mb-4">User feedback</h3>
+                <p className="text-sm text-muted-foreground text-center py-12 border border-dashed border-border rounded-lg">
+                  Feedback collection is not set up yet. Add a feedback table in Supabase to
+                  enable this tab.
+                </p>
               </TabsContent>
             </Tabs>
           </CardContent>

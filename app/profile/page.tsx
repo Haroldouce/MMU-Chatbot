@@ -1,23 +1,101 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { MessageSquare, ArrowLeft, LogOut, User, Mail, Calendar } from "lucide-react"
+import { MessageSquare, ArrowLeft, LogOut, User, Mail } from "lucide-react"
+import { ChangePasswordDialog } from "@/components/change-password-dialog"
+import supabase from "@/lib/supabase"
+import type { AccountStatus, UserProfile } from "@/lib/profile"
+
+interface ProfileApiResponse {
+  user: {
+    id: string
+    email: string | null
+    email_confirmed_at: string | null
+    last_sign_in_at: string | null
+    created_at: string | null
+  }
+  profile: UserProfile
+  accountStatus: AccountStatus
+  accountStatusLabel: string
+}
+
+function statusDisplay(status: AccountStatus, label: string) {
+  switch (status) {
+    case "active":
+      return { text: `✅ ${label}`, className: "text-green-600 dark:text-green-400" }
+    default:
+      return { text: `⏳ ${label}`, className: "text-amber-600 dark:text-amber-400" }
+  }
+}
 
 export default function ProfilePage() {
   const router = useRouter()
+  const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [lastSignIn, setLastSignIn] = useState<string | null>(null)
+  const [joinedAt, setJoinedAt] = useState<string | null>(null)
+  const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [accountStatus, setAccountStatus] = useState<AccountStatus>("pending")
+  const [accountStatusLabel, setAccountStatusLabel] = useState("Loading...")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleLogout = () => {
-    // Simulate logout process
+  useEffect(() => {
+    const fetchProfile = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) {
+        router.push("/login")
+        return
+      }
+
+      try {
+        const res = await fetch("/api/profile")
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          throw new Error(body?.error ?? "Failed to load profile")
+        }
+
+        const data: ProfileApiResponse = await res.json()
+        setUserEmail(data.user.email)
+        setLastSignIn(data.user.last_sign_in_at)
+        setJoinedAt(data.user.created_at)
+        setProfile(data.profile)
+        setAccountStatus(data.accountStatus)
+        setAccountStatusLabel(data.accountStatusLabel)
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Failed to load profile")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchProfile()
+  }, [router])
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
     router.push("/login")
   }
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-muted-foreground">Loading profile...</p>
+      </div>
+    )
+  }
+
+  const status = statusDisplay(accountStatus, accountStatusLabel)
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20">
-      {/* Header */}
       <header className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-40">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-2">
@@ -33,10 +111,12 @@ export default function ProfilePage() {
         </div>
       </header>
 
-      {/* Profile Content */}
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-2xl mx-auto space-y-6">
-          {/* Profile Card */}
+          {error && (
+            <p className="text-sm text-destructive text-center">{error}</p>
+          )}
+
           <Card>
             <CardHeader className="space-y-4">
               <div className="flex items-center gap-4">
@@ -44,8 +124,12 @@ export default function ProfilePage() {
                   <User className="h-8 w-8 text-primary-foreground" />
                 </div>
                 <div>
-                  <CardTitle className="text-2xl">Test</CardTitle>
-                  <CardDescription>Student ID: M20123456</CardDescription>
+                  <CardTitle className="text-2xl">
+                    {profile?.username || "No username set"}
+                  </CardTitle>
+                  <CardDescription>
+                    Role: {profile?.role || "user"}
+                  </CardDescription>
                 </div>
               </div>
             </CardHeader>
@@ -53,116 +137,64 @@ export default function ProfilePage() {
             <Separator />
 
             <CardContent className="pt-6 space-y-6">
-              {/* Profile Information */}
               <div className="space-y-4">
                 <h3 className="font-semibold text-lg">Profile Information</h3>
-
                 <div className="grid gap-4 md:grid-cols-2">
-                  {/* Email */}
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                       <Mail className="h-4 w-4" />
                       Email Address
                     </div>
-                    <p className="text-sm">test@gmail.com</p>
+                    <p className="text-sm">{userEmail ?? "N/A"}</p>
                   </div>
 
-                  {/* Program */}
                   <div className="space-y-2">
-                    <div className="text-sm font-medium text-muted-foreground">Program</div>
-                    <p className="text-sm">Bachelor of Science in Computer Science</p>
-                  </div>
-
-                  {/* Year of Study */}
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                      <Calendar className="h-4 w-4" />
-                      Year of Study
+                    <div className="text-sm font-medium text-muted-foreground">
+                      Account Status
                     </div>
-                    <p className="text-sm">Third Year (Year 3)</p>
+                    <p className={`text-sm ${status.className}`}>{status.text}</p>
                   </div>
 
-                  {/* Faculty */}
                   <div className="space-y-2">
-                    <div className="text-sm font-medium text-muted-foreground">Faculty</div>
-                    <p className="text-sm">Faculty of Computing and Informatics</p>
+                    <div className="text-sm font-medium text-muted-foreground">
+                      Joined
+                    </div>
+                    <p className="text-sm">
+                      {joinedAt
+                        ? new Date(joinedAt).toLocaleDateString()
+                        : "N/A"}
+                    </p>
                   </div>
                 </div>
               </div>
 
               <Separator />
 
-              {/* Quick Stats */}
-              <div className="space-y-4">
-                <h3 className="font-semibold text-lg">Account Statistics</h3>
-
-                <div className="grid gap-4 md:grid-cols-3">
-                  <Card className="bg-secondary/50">
-                    <CardContent className="pt-6">
-                      <div className="text-center">
-                        <p className="text-3xl font-bold text-primary">23</p>
-                        <p className="text-sm text-muted-foreground">Chat Conversations</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="bg-secondary/50">
-                    <CardContent className="pt-6">
-                      <div className="text-center">
-                        <p className="text-3xl font-bold text-primary">127</p>
-                        <p className="text-sm text-muted-foreground">Questions Asked</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="bg-secondary/50">
-                    <CardContent className="pt-6">
-                      <div className="text-center">
-                        <p className="text-3xl font-bold text-primary">15 min</p>
-                        <p className="text-sm text-muted-foreground">Avg. Response Time</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Account Settings */}
               <div className="space-y-4">
                 <h3 className="font-semibold text-lg">Account Settings</h3>
-
                 <div className="space-y-3">
-                  <Button variant="outline" className="w-full justify-start" disabled>
-                    Change Password
-                  </Button>
+                  <ChangePasswordDialog />
                   <Button variant="outline" className="w-full justify-start" disabled>
                     Email Preferences
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start" disabled>
-                    Privacy Settings
                   </Button>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Logout Button */}
-          <div className="flex gap-3">
-            <Button
-              variant="destructive"
-              size="lg"
-              className="w-full gap-2"
-              onClick={handleLogout}
-            >
-              <LogOut className="h-4 w-4" />
-              Logout
-            </Button>
-          </div>
+          <Button
+            variant="destructive"
+            size="lg"
+            className="w-full gap-2"
+            onClick={handleLogout}
+          >
+            <LogOut className="h-4 w-4" />
+            Logout
+          </Button>
 
-          {/* Footer Info */}
           <p className="text-center text-xs text-muted-foreground">
-            Last login: Today at 2:30 PM
+            Last login:{" "}
+            {lastSignIn ? new Date(lastSignIn).toLocaleString() : "N/A"}
           </p>
         </div>
       </main>

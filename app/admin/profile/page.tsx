@@ -1,16 +1,33 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { MessageSquare, LogOut, User, Mail, Calendar, Shield, Clock } from "lucide-react"
+import { MessageSquare, LogOut, User, Mail, Shield } from "lucide-react"
+import supabase from "@/lib/supabase"
 
 export default function AdminProfilePage() {
   const router = useRouter()
+  const [email, setEmail] = useState<string | null>(null)
+  const [username, setUsername] = useState<string | null>(null)
 
-  const handleLogout = () => {
+  useEffect(() => {
+    fetch("/api/profile")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) {
+          setEmail(data.user?.email ?? null)
+          setUsername(data.profile?.username ?? null)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
     router.push("/admin/login")
   }
 
@@ -51,7 +68,7 @@ export default function AdminProfilePage() {
                   <Shield className="h-8 w-8 text-primary-foreground" />
                 </div>
                 <div>
-                  <CardTitle className="text-2xl">System Administrator</CardTitle>
+                  <CardTitle className="text-2xl">{username ?? "Administrator"}</CardTitle>
                   <CardDescription>EBchat Admin Account</CardDescription>
                 </div>
               </div>
@@ -71,7 +88,7 @@ export default function AdminProfilePage() {
                       <Mail className="h-4 w-4" />
                       Email Address
                     </div>
-                    <p className="text-sm">admin@ebchat.com</p>
+                    <p className="text-sm">{email ?? "—"}</p>
                   </div>
 
                   {/* Role */}
