@@ -56,21 +56,10 @@ collection = client.get_or_create_collection(
 
 app = FastAPI(title="MMU RAG API")
 
-# Allow localhost for development and all origins for production
-allowed_origins = [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://127.0.0.1:3000",
-]
-
-# Allow environment-specified origin (Vercel frontend URL)
-if vercel_url := os.getenv("VERCEL_URL"):
-    allowed_origins.append(f"https://{vercel_url}")
-
-# Also allow any HTTPS domain matching the pattern (for safety with different Vercel deployments)
+# CORS: Allow all origins (actual security provided by Supabase JWT auth tokens)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
