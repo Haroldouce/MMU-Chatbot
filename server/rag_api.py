@@ -266,7 +266,7 @@ def ingest_pdf(pdf_path: str) -> Dict[str, Any]:
 def classify_intent(user_input: str, model: str = "mistral") -> str:
     prompt = f"""
     You are an intent classification assistant. 
-    Analyze the user input and classify it into exactly one of these categories:
+    Analyze the usear input and classify it into exactly one of these categories:
     
     1. 'greeting': For hellos, goodbyes, and casual pleasantries.
     2. 'mmu_query': For ANY questions related to university matters, including Multimedia University (MMU), admissions, scholarships, courses, fees, campus, or studying.

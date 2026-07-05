@@ -24,8 +24,8 @@ export async function middleware(req: NextRequest) {
   )
 
   const {
-    data: { session },
-  } = await supabase.auth.getSession()
+    data: { user },
+  } = await supabase.auth.getUser()
 
   const pathname = req.nextUrl.pathname
   const isProtectedChat =
@@ -33,27 +33,27 @@ export async function middleware(req: NextRequest) {
   const isAdminRoute =
     pathname.startsWith("/admin") && pathname !== "/admin/login"
 
-  if (!session && isProtectedChat) {
+  if (!user && isProtectedChat) {
     return NextResponse.redirect(new URL("/login", req.url))
   }
 
-  if (session && pathname.startsWith("/login")) {
+  if (user && pathname.startsWith("/login")) {
     return NextResponse.redirect(new URL("/chat", req.url))
   }
 
-  if (!session && pathname === "/profile") {
+  if (!user && pathname === "/profile") {
     return NextResponse.redirect(new URL("/login", req.url))
   }
 
   if (isAdminRoute) {
-    if (!session) {
+    if (!user) {
       return NextResponse.redirect(new URL("/admin/login", req.url))
     }
 
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
-      .eq("id", session.user.id)
+      .eq("id", user.id)
       .maybeSingle()
 
     if (profile?.role !== "admin") {
@@ -63,11 +63,11 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  if (session && pathname === "/admin/login") {
+  if (user && pathname === "/admin/login") {
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
-      .eq("id", session.user.id)
+      .eq("id", user.id)
       .maybeSingle()
 
     if (profile?.role === "admin") {

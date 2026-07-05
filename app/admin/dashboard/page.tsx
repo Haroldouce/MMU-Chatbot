@@ -18,8 +18,16 @@ import {
   User,
   AlertCircle,
   RefreshCw,
+  Mail,
+  CheckCheck,
 } from "lucide-react"
 import supabase from "@/lib/supabase"
+import {
+  feedbackTypeLabel,
+  type FeedbackItem,
+  type FeedbackType,
+} from "@/lib/feedback"
+import { cn } from "@/lib/utils"
 
 interface AdminDocument {
   id: string
@@ -60,6 +68,9 @@ export default function AdminDashboard() {
   const [documents, setDocuments] = useState<AdminDocument[]>([])
   const [users, setUsers] = useState<AdminUser[]>([])
   const [activity, setActivity] = useState<ActivityItem[]>([])
+  const [feedbackItems, setFeedbackItems] = useState<FeedbackItem[]>([])
+  const [feedbackNewCount, setFeedbackNewCount] = useState(0)
+  const [markingReviewedId, setMarkingReviewedId] = useState<string | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -70,11 +81,12 @@ export default function AdminDashboard() {
     setError(null)
     setLoading(true)
     try {
-      const [statsRes, docsRes, usersRes, activityRes] = await Promise.all([
+      const [statsRes, docsRes, usersRes, activityRes, feedbackRes] = await Promise.all([
         fetch("/api/admin/stats"),
         fetch("/api/admin/documents"),
         fetch("/api/admin/users"),
         fetch("/api/admin/activity"),
+        fetch("/api/admin/feedback"),
       ])
 
       if (!statsRes.ok) {
@@ -99,6 +111,12 @@ export default function AdminDashboard() {
         const activityData = await activityRes.json()
         setActivity(activityData.activity ?? [])
       }
+
+      if (feedbackRes.ok) {
+        const feedbackData = await feedbackRes.json()
+        setFeedbackItems(feedbackData.feedback ?? [])
+        setFeedbackNewCount(feedbackData.newCount ?? 0)
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to load dashboard")
     } finally {
@@ -113,6 +131,29 @@ export default function AdminDashboard() {
   const handleLogout = async () => {
     await supabase.auth.signOut()
     router.push("/admin/login")
+  }
+
+  const handleMarkReviewed = async (id: string) => {
+    setMarkingReviewedId(id)
+    try {
+      const res = await fetch(`/api/admin/feedback/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "reviewed" }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body?.error ?? "Failed to update feedback")
+      }
+      setFeedbackItems((prev) =>
+        prev.map((f) => (f.id === id ? { ...f, status: "reviewed" } : f)),
+      )
+      setFeedbackNewCount((prev) => Math.max(0, prev - 1))
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to update feedback")
+    } finally {
+      setMarkingReviewedId(null)
+    }
   }
 
   const handleDelete = async (doc: AdminDocument) => {
@@ -353,7 +394,14 @@ export default function AdminDashboard() {
                 <TabsTrigger value="documents">FAQ Documents</TabsTrigger>
                 <TabsTrigger value="users">Users</TabsTrigger>
                 <TabsTrigger value="logs">Activity</TabsTrigger>
-                <TabsTrigger value="feedback">Feedback</TabsTrigger>
+                <TabsTrigger value="feedback" className="relative">
+                  Feedback
+                  {feedbackNewCount > 0 && (
+                    <span className="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-destructive-foreground">
+                      {feedbackNewCount}
+                    </span>
+                  )}
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="documents" className="space-y-4">
@@ -508,11 +556,90 @@ export default function AdminDashboard() {
               </TabsContent>
 
               <TabsContent value="feedback" className="space-y-4">
-                <h3 className="font-semibold mb-4">User feedback</h3>
-                <p className="text-sm text-muted-foreground text-center py-12 border border-dashed border-border rounded-lg">
-                  Feedback collection is not set up yet. Add a feedback table in Supabase to
-                  enable this tab.
-                </p>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold">User feedback & unresolved queries</h3>
+                  {feedbackNewCount > 0 && (
+                    <span className="text-xs font-medium text-destructive">
+                      {feedbackNewCount} new
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-3 max-h-[520px] overflow-y-auto">
+                  {feedbackItems.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-12 border border-dashed border-border rounded-lg">
+                      No feedback submitted yet.
+                    </p>
+                  )}
+                  {feedbackItems.map((item) => {
+                    const isNew = item.status === "new"
+                    const isUnresolved = item.feedback_type === "unresolved_query"
+
+                    return (
+                      <div
+                        key={item.id}
+                        className={cn(
+                          "rounded-lg border p-4 transition-colors",
+                          isNew && isUnresolved
+                            ? "border-amber-500/60 bg-amber-500/10 ring-1 ring-amber-500/30"
+                            : isNew
+                              ? "border-primary/50 bg-primary/5 ring-1 ring-primary/20"
+                              : "border-border hover:bg-muted/50",
+                        )}
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3 mb-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={cn(
+                                "text-xs font-semibold px-2 py-0.5 rounded-full",
+                                isUnresolved
+                                  ? "bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                                  : "bg-primary/15 text-primary",
+                              )}
+                            >
+                              {feedbackTypeLabel(item.feedback_type as FeedbackType)}
+                            </span>
+                            {isNew && (
+                              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-destructive/15 text-destructive">
+                                New
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-muted-foreground shrink-0">
+                            {new Date(item.created_at).toLocaleString()}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 text-sm mb-2">
+                          <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <a
+                            href={`mailto:${item.user_email}`}
+                            className="text-primary hover:underline break-all"
+                          >
+                            {item.user_email}
+                          </a>
+                        </div>
+
+                        <p className="text-sm whitespace-pre-wrap break-words">{item.message}</p>
+
+                        {isNew && (
+                          <div className="mt-3 pt-3 border-t border-border/60">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-2"
+                              disabled={markingReviewedId === item.id}
+                              onClick={() => handleMarkReviewed(item.id)}
+                            >
+                              <CheckCheck className="h-4 w-4" />
+                              {markingReviewedId === item.id ? "Updating…" : "Mark as reviewed"}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
               </TabsContent>
             </Tabs>
           </CardContent>

@@ -52,12 +52,20 @@ export async function requireAdmin(): Promise<
 export async function getSessionAuthHeader(): Promise<Record<string, string>> {
   const supabase = await createClient()
   const {
-    data: { session },
-  } = await supabase.auth.getSession()
+    data: { user },
+    error,
+  } = await supabase.auth.getUser()
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   }
+
+  if (error || !user) return headers
+
+  // Access token only — user identity verified above via getUser()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
 
   if (session?.access_token) {
     headers.Authorization = `Bearer ${session.access_token}`

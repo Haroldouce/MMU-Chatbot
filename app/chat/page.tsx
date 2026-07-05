@@ -7,6 +7,7 @@ import { ChatMessages } from "@/components/chat-messages"
 import { ChatInput } from "@/components/chat-input"
 import { Menu, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { FeedbackDialog } from "@/components/feedback-dialog"
 import { WELCOME_MESSAGE } from "@/lib/chat"
 import { DEFAULT_CHAT_MODEL, type ChatModelId } from "@/lib/llm-models"
 import { consumeChatStream } from "@/lib/chat-stream"
@@ -306,6 +307,7 @@ export default function ChatPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <FeedbackDialog disabled={isGenerating || isCreatingChat} />
               <Button
                 variant="outline"
                 size="sm"
