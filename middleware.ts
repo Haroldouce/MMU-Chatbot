@@ -28,6 +28,12 @@ export async function middleware(req: NextRequest) {
   } = await supabase.auth.getUser()
 
   const pathname = req.nextUrl.pathname
+
+  // Redirect root path to login
+  if (pathname === "/") {
+    return NextResponse.redirect(new URL("/login", req.url))
+  }
+
   const isProtectedChat =
     pathname === "/chat" || pathname.startsWith("/chat/")
   const isAdminRoute =
@@ -79,5 +85,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/chat/:path*", "/login", "/profile", "/admin/:path*"],
+  matcher: ["/", "/chat/:path*", "/login", "/profile", "/admin/:path*"],
 }
