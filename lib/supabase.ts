@@ -1,10 +1,14 @@
 // lib/supabase.ts
-import { createClient } from "@supabase/supabase-js"
 import { createBrowserClient } from '@supabase/ssr'
 
-const supabase = createBrowserClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+let supabase: ReturnType<typeof createBrowserClient> | null = null
 
-export default supabase
+// Only initialize if running in browser and env vars are available
+if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+  supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  )
+}
+
+export default supabase as ReturnType<typeof createBrowserClient>
