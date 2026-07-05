@@ -19,8 +19,8 @@ from docling.datamodel.base_models import InputFormat
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 
-from db import AsyncSession, get_db
-from models import Profile, Base
+from server.db import AsyncSession, get_db
+from server.models import Profile, Base
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
