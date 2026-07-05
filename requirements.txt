@@ -10,4 +10,4 @@ pymupdf
 pymupdf4llm
 asyncpg
 sqlalchemy
-psycorg2
+psycopg2
