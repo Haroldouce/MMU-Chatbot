@@ -11,3 +11,4 @@ pymupdf4llm
 asyncpg
 sqlalchemy
 psycopg2
+supabase
