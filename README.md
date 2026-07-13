@@ -1,11 +1,11 @@
-# Updated-ui-chatbot
+# FAQ Chatbot
 
 ## RAG Backend + Next.js Integration
 
 1. Install Python dependencies (recommended in a virtualenv):
 
 ```bash
-python -m pip install fastapi uvicorn chromadb ollama pypdf sentence-transformers
+pip install requirements.txt
 ```
 
 2. Populate `server/rag_api.py` paths and API keys:
