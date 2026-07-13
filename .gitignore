@@ -24,4 +24,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# python
 venv/
+__pycache__/
+*.py[cod]
+
+# local vector db
+my_vector_db/

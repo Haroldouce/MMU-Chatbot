@@ -137,3 +137,10 @@
 .animate-shimmer {
   animation: shimmer 3s ease-in-out infinite;
 }
+
+/* Completely hide the Next.js development error overlay */
+nextjs-portal,
+#nextjs-portal,
+[data-nextjs-dialog] {
+  display: none !important;
+}

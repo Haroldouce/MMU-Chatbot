@@ -102,7 +102,7 @@ class QueryResponse(BaseModel):
     metrics: Dict[str, float]
 
 class IngestPayload(BaseModel):
-    pdf_paths: List[str]
+    file_paths: List[str]
 
 class IngestFileResult(BaseModel):
     file: str
@@ -172,12 +172,13 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[st
     return chunks
 
 
-def ingest_pdf(pdf_path: str) -> Dict[str, Any]:
-    print(f"[TRACE] ingest_pdf() called with: {pdf_path}")
-    file_name = os.path.splitext(os.path.basename(pdf_path))[0]
+def ingest_file(file_path: str) -> Dict[str, Any]:
+    print(f"[TRACE] ingest_file() called with: {file_path}")
+    file_name = os.path.splitext(os.path.basename(file_path))[0]
+    ext = os.path.splitext(file_path)[1].lower()
     try:
-        if not os.path.exists(pdf_path):
-            return {"file": pdf_path, "status": "error", "message": "File not found", "chunks": 0}
+        if not os.path.exists(file_path):
+            return {"file": file_path, "status": "error", "message": "File not found", "chunks": 0}
 
         print(f"[TRACE] file_name = {file_name}")
 
@@ -195,10 +196,17 @@ def ingest_pdf(pdf_path: str) -> Dict[str, Any]:
         count_before = collection.count()
         print(f"[TRACE] Proceeding to ingest... collection.count() before = {count_before}")
 
-        markdown_text = convert_pdf_to_markdown(pdf_path)
-        print(f"[TRACE] Extracted {len(markdown_text)} characters of text")
+        if ext == ".txt":
+            with open(file_path, "r", encoding="utf-8") as f:
+                extracted_text = f.read()
+        elif ext == ".pdf":
+            extracted_text = convert_pdf_to_markdown(file_path)
+        else:
+            return {"file": file_path, "status": "error", "message": f"Unsupported file extension: {ext}", "chunks": 0}
 
-        text_chunks = chunk_text(markdown_text)
+        print(f"[TRACE] Extracted {len(extracted_text)} characters of text")
+
+        text_chunks = chunk_text(extracted_text)
 
         if not text_chunks:
             return {
@@ -344,7 +352,7 @@ def stream_query_response(
 
         prompt = f"""
                 You are a university FAQ assistant for Multimedia University (MMU).
-                Answer ONLY using the provided context.
+                Answer ONLY using the provided context and do not mention about the word 'provided context' or 'context.
                 If the answer is not found, say \"I may not have information about that. Try again later.\"
 
                 Context:
@@ -372,7 +380,7 @@ def rag_query(question: str, n_results: int = 3, model: str = "mistral") -> Quer
 
     prompt = f"""
                 You are a university FAQ assistant for Multimedia University (MMU).
-                Answer ONLY using the provided context.
+                Answer ONLY using the provided context and do not mention about the word 'provided context' or 'context.
                 If the answer is not found, say \"I may not have information about that. Try again later.\"
 
                 Context:
@@ -482,17 +490,17 @@ def ingest_status(source: str | None = None):
 
 @app.post("/ingest/all", response_model=IngestResponse)
 def api_ingest_all(user=Depends(get_current_user)):
-    """Ingest every PDF in public/uploads (skips files already indexed)."""
+    """Ingest every PDF or TXT in public/uploads (skips files already indexed)."""
     if not os.path.isdir(UPLOADS_DIR):
         raise HTTPException(status_code=404, detail=f"Uploads dir not found: {UPLOADS_DIR}")
 
-    pdf_paths = [
+    file_paths = [
         os.path.join(UPLOADS_DIR, name)
         for name in os.listdir(UPLOADS_DIR)
-        if name.lower().endswith(".pdf")
+        if name.lower().endswith((".pdf", ".txt"))
     ]
 
-    if not pdf_paths:
+    if not file_paths:
         return {
             "ingested": [],
             "skipped": [],
@@ -500,7 +508,7 @@ def api_ingest_all(user=Depends(get_current_user)):
             "collection_count": collection.count(),
         }
 
-    payload = IngestPayload(pdf_paths=pdf_paths)
+    payload = IngestPayload(file_paths=file_paths)
     return api_ingest(payload, user)
 
 
@@ -511,8 +519,8 @@ def api_ingest(payload: IngestPayload, user = Depends(get_current_user)):
     skipped: List[str] = []
     results: List[IngestFileResult] = []
 
-    for path in payload.pdf_paths:
-        result = ingest_pdf(path)
+    for path in payload.file_paths:
+        result = ingest_file(path)
         print(
             f"[TRACE] {path} → status: {result['status']}, "
             f"chunks: {result.get('chunks', 0)}, message: {result.get('message', 'N/A')}"

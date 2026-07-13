@@ -10,17 +10,17 @@ export async function POST(request: Request) {
     const body = await request.json()
 
     // Ingest route: forward file paths to backend /ingest (full filesystem path expected)
-    if (body?.pdf_paths) {
+    if (body?.file_paths) {
       const adminAuth = await requireAdmin()
       if (adminAuth instanceof NextResponse) return adminAuth
 
-      if (!Array.isArray(body.pdf_paths) || body.pdf_paths.length === 0) {
-        return NextResponse.json({ error: "Missing pdf_paths" }, { status: 400 })
+      if (!Array.isArray(body.file_paths) || body.file_paths.length === 0) {
+        return NextResponse.json({ error: "Missing file_paths" }, { status: 400 })
       }
 
       const authHeaders = await getSessionAuthHeader()
 
-      const resolvedPaths = body.pdf_paths.map((p: string) => {
+      const resolvedPaths = body.file_paths.map((p: string) => {
         // if (path.isAbsolute(p)) return p
         
         // Strip leading slash and resolve to actual filesystem path
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
       const ingestResponse = await fetch(`${backendUrl}/ingest`, {
         method: "POST",
         headers: authHeaders,
-        body: JSON.stringify({ pdf_paths: resolvedPaths }),
+        body: JSON.stringify({ file_paths: resolvedPaths }),
       })
 
       const json = await ingestResponse.json().catch(() => ({}))

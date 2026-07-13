@@ -142,9 +142,6 @@ function AdminLoginForm() {
           </CardContent>
         </Card>
 
-        <p className="mt-8 text-center text-xs text-muted-foreground">
-          Set <code className="text-xs">profiles.role = &apos;admin&apos;</code> in Supabase for your user.
-        </p>
       </div>
     </div>
   )

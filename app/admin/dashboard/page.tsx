@@ -180,7 +180,7 @@ export default function AdminDashboard() {
   }
 
   const handleReindexAll = async () => {
-    if (!confirm("Ingest all PDFs in public/uploads into the knowledge base?")) return
+    if (!confirm("Ingest all PDFs and TXT files in public/uploads into the knowledge base?")) return
     setReindexing(true)
     setIngestMessage(null)
     setError(null)
@@ -206,8 +206,8 @@ export default function AdminDashboard() {
   }
 
   const handleUpload = async (file: File) => {
-    if (!file.name.toLowerCase().endsWith(".pdf")) {
-      setError("Only PDF files can be ingested into the knowledge base.")
+    if (!file.name.toLowerCase().endsWith(".pdf") && !file.name.toLowerCase().endsWith(".txt")) {
+      setError("Only PDF and TXT files can be ingested into the knowledge base.")
       return
     }
 
@@ -237,7 +237,7 @@ export default function AdminDashboard() {
       const ingestRes = await fetch("/api/rag", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pdf_paths: [uploadJson.path] }),
+        body: JSON.stringify({ file_paths: [uploadJson.path] }),
       })
       const ingestJson = await ingestRes.json()
 
@@ -371,7 +371,7 @@ export default function AdminDashboard() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">FAQ Documents</p>
+                  <p className="text-sm text-muted-foreground">Knowledge Documents</p>
                   <p className="text-3xl font-bold mt-2">
                     {loading ? "…" : (stats?.documentCount ?? documents.length)}
                   </p>
@@ -393,7 +393,7 @@ export default function AdminDashboard() {
           <CardContent>
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="documents">FAQ Documents</TabsTrigger>
+                <TabsTrigger value="documents">Knowledge Documents</TabsTrigger>
                 <TabsTrigger value="users">Users</TabsTrigger>
                 <TabsTrigger value="logs">Activity</TabsTrigger>
                 <TabsTrigger value="feedback" className="relative">
@@ -408,12 +408,12 @@ export default function AdminDashboard() {
 
               <TabsContent value="documents" className="space-y-4">
                 <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
-                  <h3 className="font-semibold">Uploaded PDFs</h3>
+                  <h3 className="font-semibold">Uploaded Documents</h3>
                   <div className="flex items-center gap-2">
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept=".pdf,application/pdf"
+                      accept=".pdf,.txt,application/pdf,text/plain"
                       className="hidden"
                       onChange={(e) => {
                         const f = e.target.files?.[0]
@@ -426,7 +426,7 @@ export default function AdminDashboard() {
                       onClick={handleReindexAll}
                       disabled={uploading || reindexing}
                     >
-                      {reindexing ? "Reindexing…" : "Reindex all PDFs"}
+                      {reindexing ? "Reindexing…" : "Reindex all Documents"}
                     </Button>
                     <Button
                       className="gap-2"
@@ -434,7 +434,7 @@ export default function AdminDashboard() {
                       disabled={uploading || reindexing}
                     >
                       <Upload className="h-4 w-4" />
-                      {uploading ? "Uploading…" : "Upload PDF"}
+                      {uploading ? "Uploading…" : "Upload Document"}
                     </Button>
                   </div>
                 </div>
