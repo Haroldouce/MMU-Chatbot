@@ -9,7 +9,7 @@ class Base(DeclarativeBase):
 class Profile(Base):
     __tablename__ = "profiles"
 
-    id: Mapped[str] = mapped_column(String, primary_key=True)  # matches auth.users.id (UUID)
+    id: Mapped[str] = mapped_column(String, primary_key=True) 
     username: Mapped[str] = mapped_column(String(100), nullable=True)
     role: Mapped[str] = mapped_column(String(20), default='user')
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
