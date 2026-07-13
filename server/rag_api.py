@@ -32,7 +32,7 @@ supabase = create_client(os.getenv("NEXT_PUBLIC_SUPABASE_URL"), os.getenv("NEXT_
 
 
 # ==========================================
-# CONFIG — always use project-root my_vector_db (avoids server/ vs root split)
+# CONFIG
 # ==========================================
 _SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.dirname(_SERVER_DIR)
@@ -56,7 +56,7 @@ collection = client.get_or_create_collection(
 
 app = FastAPI(title="MMU RAG API")
 
-# CORS: Allow all origins (actual security provided by Supabase JWT auth tokens)
+# CORS: security provided by Supabase JWT auth tokens
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -160,31 +160,6 @@ def convert_pdf_to_markdown(pdf_path: str) -> str:
             return fallback
 
     return cleaned
-
-    # # Initialize the converter
-    # converter = DocumentConverter()
-    
-    # # Perform the conversion
-    # result = converter.convert(pdf_path)
-    
-    # # Export the document as Markdown
-    # markdown_content = result.document.export_to_markdown()
-    
-    # return markdown_content
-
-    # pipeline_options = PdfPipelineOptions()
-    # pipeline_options.do_ocr = False
-    # pipeline_options.generate_page_images = False
-    # pipeline_options.generate_picture_images = False
-    # pipeline_options.images_scale = 1.0
-
-    # converter = DocumentConverter(
-    #     format_options={
-    #         InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
-    #     }
-    # )
-    # result = converter.convert(pdf_path)
-    # return result.document.export_to_markdown()
 
 
 def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[str]:
@@ -301,10 +276,10 @@ def classify_intent(user_input: str, model: str = "mistral") -> str:
 def handle_user_message(
     question: str, n_results: int = 3, model: str = "mistral"
 ) -> QueryResponse:
-    # Step 1: Classify the intent
+    # Classify the intent
     intent = classify_intent(question, model)
     
-    # Step 2: Route based on intent
+    # Route based on intent
     if intent == "greeting":
         return QueryResponse(
             answer="Hello! I am the MMU FAQ assistant. How can I help you today?",
@@ -322,7 +297,7 @@ def handle_user_message(
         )
         
     else:
-        # Step 3: Run the full RAG pipeline and pass n_results
+        # Run the full RAG pipeline and pass n_results
         return rag_query(question, n_results, model)
 
 
@@ -446,7 +421,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         return {"status": "unhealthy", "details": str(e)}
     
 @app.get("/user/{user_id}")
-async def get_user(user_id: str, db: AsyncSession = Depends(get_db)):  # id is str (UUID)
+async def get_user(user_id: str, db: AsyncSession = Depends(get_db)):
     profile = await db.get(Profile, user_id)
     return profile
 
